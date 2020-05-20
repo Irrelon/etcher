@@ -20,6 +20,7 @@ import * as os from 'os';
 import { readdirSync } from 'fs';
 import * as SimpleProgressWebpackPlugin from 'simple-progress-webpack-plugin';
 import { BannerPlugin } from 'webpack';
+import outdent from 'outdent';
 
 /**
  * Don't webpack package.json as mixpanel & sentry tokens
@@ -118,7 +119,7 @@ const commonConfig = {
 				},
 			},
 			{
-				// remove node-pre-gyp magic from ext2fs
+				// remove bindings magic from ext2fs
 				test: /node_modules\/ext2fs\/lib\/(ext2fs|binding)\.js$/,
 				loader: 'string-replace-loader',
 				options: {
@@ -128,17 +129,24 @@ const commonConfig = {
 				},
 			},
 			{
-				// remove node-pre-gyp magic from mountutils
+				// remove bindings magic from mountutils
 				test: /node_modules\/mountutils\/index\.js$/,
 				loader: 'string-replace-loader',
 				options: {
-					search:
-						"require('bindings')({\n  bindings: 'MountUtils',\n  /* eslint-disable camelcase */\n  module_root: __dirname\n  /* eslint-enable camelcase */\n})",
+					search: outdent`
+						require('bindings')({
+						  bindings: 'MountUtils',
+						  /* eslint-disable camelcase */
+						  module_root: __dirname
+						  /* eslint-enable camelcase */
+						})
+					`,
 					replace: "require('./build/Release/MountUtils.node')",
 					strict: true,
 				},
 			},
 			{
+				// Copy native modules to generated code
 				test: /\.node$/,
 				use: [
 					{
@@ -169,6 +177,8 @@ const commonConfig = {
 		platformSpecificModule('none', 'spawn-sync'),
 		// Not needed as we replace all requires for it
 		platformSpecificModule('none', 'node-pre-gyp', '{ find: () => {} }'),
+		// Not needed as we replace all requires for it
+		platformSpecificModule('none', 'bindings'),
 	],
 };
 
