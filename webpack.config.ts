@@ -194,6 +194,39 @@ const guiConfig = {
 	],
 };
 
+const htmlConfig = {
+	mode: 'production',
+	optimization: {
+		minimize: false,
+	},
+	module: {
+		rules: [
+			{
+				test: /\.html$/,
+				loader: 'html-loader',
+			},
+			{
+				test: /\.css$/i,
+				// TODO ?
+				use: ['css-loader'],
+			},
+			{
+				test: /\.(woff|woff2|eot|ttf|otf|svg)$/,
+				loader: 'file-loader',
+				options: {
+					name: '[path][name].[ext]',
+				},
+			},
+		],
+	},
+	entry: {
+		index: path.join(__dirname, 'lib', 'gui', 'app', 'index.html'),
+	},
+	output: {
+		path: path.join(__dirname, 'generated'),
+	},
+};
+
 const etcherConfig = {
 	...commonConfig,
 	target: 'electron-main',
@@ -211,4 +244,4 @@ const etcherConfig = {
 	},
 };
 
-module.exports = [guiConfig, etcherConfig];
+module.exports = [htmlConfig, guiConfig, etcherConfig];
