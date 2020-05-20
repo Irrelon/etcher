@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-import * as _ from 'lodash';
-import * as path from 'path';
-import * as os from 'os';
 import { readdirSync } from 'fs';
+import * as _ from 'lodash';
+import * as os from 'os';
+import outdent from 'outdent';
+import * as path from 'path';
 import * as SimpleProgressWebpackPlugin from 'simple-progress-webpack-plugin';
 import { BannerPlugin } from 'webpack';
-import outdent from 'outdent';
 
 /**
  * Don't webpack package.json as mixpanel & sentry tokens
@@ -58,6 +58,19 @@ function platformSpecificModule(
 	};
 }
 
+interface ReplacementRule {
+	search: string;
+	replace: string | (() => string);
+}
+
+function replace(test: RegExp, ...replacements: ReplacementRule[]) {
+	return {
+		loader: 'string-replace-loader',
+		test,
+		options: { multiple: replacements.map((r) => ({ ...r, strict: true })) },
+	};
+}
+
 const commonConfig = {
 	mode: 'production',
 	optimization: {
@@ -69,71 +82,46 @@ const commonConfig = {
 				test: /\.tsx?$/,
 				use: 'ts-loader',
 			},
-			{
-				// remove bindings magic from drivelist
-				test: /node_modules\/drivelist\/js\/index\.js$/,
-				loader: 'string-replace-loader',
-				options: {
-					multiple: [
-						{
-							search: 'require("bindings");',
-							replace: "require('../build/Release/drivelist.node')",
-							strict: true,
-						},
-						{
-							search: "bindings('drivelist')",
-							replace: 'bindings',
-							strict: true,
-						},
-					],
+			// remove bindings magic from drivelist
+			replace(
+				/node_modules\/drivelist\/js\/index\.js$/,
+				{
+					search: 'require("bindings");',
+					replace: "require('../build/Release/drivelist.node')",
 				},
-			},
-			{
-				// remove node-pre-gyp magic from lzma-native
-				test: /node_modules\/lzma-native\/index\.js$/,
-				loader: 'string-replace-loader',
-				options: {
-					search: 'require(binding_path)',
-					replace: () => {
-						const files = readdirSync(path.join('node_modules', 'lzma-native'));
-						const bindingFolder = files.find((f) => f.startsWith('binding-'));
-						if (bindingFolder === undefined) {
-							throw new Error('Could not find lzma_native binding');
-						}
-						return `require('./${path.posix.join(
-							bindingFolder,
-							'lzma_native.node',
-						)}')`;
-					},
-					strict: true,
+				{
+					search: "bindings('drivelist')",
+					replace: 'bindings',
 				},
-			},
-			{
-				// remove node-pre-gyp magic from usb
-				test: /node_modules\/@balena.io\/usb\/usb\.js$/,
-				loader: 'string-replace-loader',
-				options: {
-					search: 'require(binding_path)',
-					replace: "require('./build/Release/usb_bindings.node')",
-					strict: true,
+			),
+			// remove node-pre-gyp magic from lzma-native
+			replace(/node_modules\/lzma-native\/index\.js$/, {
+				search: 'require(binding_path)',
+				replace: () => {
+					const files = readdirSync(path.join('node_modules', 'lzma-native'));
+					const bindingFolder = files.find((f) => f.startsWith('binding-'));
+					if (bindingFolder === undefined) {
+						throw new Error('Could not find lzma_native binding');
+					}
+					return `require('./${path.posix.join(
+						bindingFolder,
+						'lzma_native.node',
+					)}')`;
 				},
-			},
-			{
-				// remove bindings magic from ext2fs
-				test: /node_modules\/ext2fs\/lib\/(ext2fs|binding)\.js$/,
-				loader: 'string-replace-loader',
-				options: {
-					search: "require('bindings')('bindings')",
-					replace: "require('../build/Release/bindings.node')",
-					strict: true,
-				},
-			},
-			{
-				// remove bindings magic from mountutils
-				test: /node_modules\/mountutils\/index\.js$/,
-				loader: 'string-replace-loader',
-				options: {
-					search: outdent`
+			}),
+			// remove node-pre-gyp magic from usb
+			replace(/node_modules\/@balena.io\/usb\/usb\.js$/, {
+				search: 'require(binding_path)',
+				replace: "require('./build/Release/usb_bindings.node')",
+			}),
+			// remove bindings magic from ext2fs
+			replace(/node_modules\/ext2fs\/lib\/(ext2fs|binding)\.js$/, {
+				search: "require('bindings')('bindings')",
+				replace: "require('../build/Release/bindings.node')",
+			}),
+			// remove bindings magic from mountutils
+			replace(/node_modules\/mountutils\/index\.js$/, {
+				search: outdent`
 						require('bindings')({
 						  bindings: 'MountUtils',
 						  /* eslint-disable camelcase */
@@ -141,12 +129,10 @@ const commonConfig = {
 						  /* eslint-enable camelcase */
 						})
 					`,
-					replace: "require('./build/Release/MountUtils.node')",
-					strict: true,
-				},
-			},
+				replace: "require('./build/Release/MountUtils.node')",
+			}),
+			// Copy native modules to generated folder
 			{
-				// Copy native modules to generated code
 				test: /\.node$/,
 				use: [
 					{
@@ -172,8 +158,9 @@ const commonConfig = {
 		filename: '[name].js',
 	},
 	externals: [
+		// Only exists on windows
 		platformSpecificModule('win32', 'winusb-driver-generator'),
-		// Not needed and required by resin-corvus > os-locale > execa > cross-spawn
+		// Not needed but required by resin-corvus > os-locale > execa > cross-spawn
 		platformSpecificModule('none', 'spawn-sync'),
 		// Not needed as we replace all requires for it
 		platformSpecificModule('none', 'node-pre-gyp', '{ find: () => {} }'),
